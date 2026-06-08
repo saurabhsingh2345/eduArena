@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { LayoutDashboard, Trophy, Zap } from 'lucide-react';
 import { getInitials } from '@/lib/utils';
+import LogoutButton from '@/components/shared/LogoutButton';
 
 export default async function LearnerLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -23,18 +24,27 @@ export default async function LearnerLayout({ children }: { children: React.Reac
           <nav className="flex items-center gap-1">
             <Link href="/dashboard" className="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all text-sm">
               <LayoutDashboard className="w-4 h-4" />
-              Dashboard
+              <span className="hidden sm:inline">Dashboard</span>
             </Link>
             <Link href="/leaderboard" className="flex items-center gap-2 px-3 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all text-sm">
               <Trophy className="w-4 h-4" />
-              Leaderboard
+              <span className="hidden sm:inline">Leaderboard</span>
             </Link>
           </nav>
 
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-sm font-bold text-white">
+          <div className="flex items-center gap-2">
+            {user?.name && (
+              <span className="hidden md:block text-sm text-slate-400 max-w-[120px] truncate">
+                {user.name}
+              </span>
+            )}
+            <div
+              className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+              title={user?.name ?? ''}
+            >
               {initials}
             </div>
+            <LogoutButton />
           </div>
         </div>
       </header>
