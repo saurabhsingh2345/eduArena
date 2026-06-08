@@ -26,18 +26,22 @@ export default function BatchPresence({ batch, onlineCount, recentJoins = [] }: 
       {/* Avatar stack */}
       <div className="flex items-center">
         <div className="flex -space-x-2">
-          {batch.learners.slice(0, 6).map((learner, i) => (
-            <motion.div
-              key={learner.userId}
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ delay: i * 0.05 }}
-              className="w-7 h-7 rounded-full border-2 border-[#0D0D1A] bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
-              title={learner.name}
-            >
-              {getInitials(learner.name)}
-            </motion.div>
-          ))}
+          {batch.learners.slice(0, 6).map((learner, i) => {
+            const entry = batch.leaderboard.find((e) => e.userId === learner.userId);
+            const name = entry?.name ?? (learner as { name?: string }).name;
+            return (
+              <motion.div
+                key={learner.userId}
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ delay: i * 0.05 }}
+                className="w-7 h-7 rounded-full border-2 border-[#0D0D1A] bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0"
+                title={name}
+              >
+                {getInitials(name)}
+              </motion.div>
+            );
+          })}
           {batch.learners.length > 6 && (
             <div className="w-7 h-7 rounded-full border-2 border-[#0D0D1A] bg-[#2A2A3E] flex items-center justify-center text-[10px] text-slate-400 font-medium">
               +{batch.learners.length - 6}
@@ -45,6 +49,7 @@ export default function BatchPresence({ batch, onlineCount, recentJoins = [] }: 
           )}
         </div>
       </div>
+
 
       {/* Recent joins */}
       <AnimatePresence>

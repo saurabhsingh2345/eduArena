@@ -27,7 +27,7 @@ export default function CourseLobby({ course, activeBatch, userId, userName, use
   const router = useRouter();
 
   useEffect(() => {
-    socket.emit('batch:join', { batchId: `course:${course._id}`, userId });
+    socket.emit('course:watch', { courseId: course._id, userId });
 
     socket.on('batch:countdown', ({ secondsUntilNext }: { secondsUntilNext: number }) => {
       setCountdown(secondsUntilNext);
@@ -177,7 +177,7 @@ export default function CourseLobby({ course, activeBatch, userId, userName, use
           )}
 
           <p className="text-xs text-slate-500 text-center">
-            Batches form automatically every 5 minutes. You&apos;ll compete with other learners in real time.
+            Batches form automatically every 1 minute. You&apos;ll compete with other learners in real time.
           </p>
         </div>
       )}

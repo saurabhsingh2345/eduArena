@@ -4,14 +4,16 @@ import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Loader2, Mail, Lock, Zap } from 'lucide-react';
+import { Loader2, Mail, Lock, Zap, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [error, setError] = useState('');
+  const [seedMsg, setSeedMsg] = useState('');
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,17 +21,37 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
 
-    const result = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-    });
+    const result = await signIn('credentials', { email, password, redirect: false });
 
-    setLoading(false);
     if (result?.error) {
+      setLoading(false);
       setError('Invalid email or password');
-    } else {
-      router.push('/dashboard');
+      return;
+    }
+
+    // Fetch session to check role and redirect accordingly
+    const sess = await fetch('/api/auth/session').then((r) => r.json());
+    const role = sess?.user?.role;
+    router.push(role === 'admin' ? '/admin' : '/dashboard');
+  };
+
+  const handleSeedAdmin = async () => {
+    setSeeding(true);
+    setSeedMsg('');
+    try {
+      const res = await fetch('/api/seed-admin', { method: 'POST' });
+      const data = await res.json();
+      if (data.password) {
+        setSeedMsg(`Admin created — email: ${data.email} / password: ${data.password}`);
+        setEmail(data.email);
+        setPassword(data.password);
+      } else {
+        setSeedMsg(data.message);
+      }
+    } catch {
+      setSeedMsg('Failed to seed admin');
+    } finally {
+      setSeeding(false);
     }
   };
 
@@ -40,7 +62,6 @@ export default function LoginPage() {
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md"
       >
-        {/* Logo */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 text-2xl font-bold">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center">
@@ -86,11 +107,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <motion.p
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="text-red-400 text-sm text-center"
-              >
+              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-400 text-sm text-center">
                 {error}
               </motion.p>
             )}
@@ -100,7 +117,23 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-slate-400">
+          <div className="mt-4 pt-4 border-t border-white/5">
+            <button
+              onClick={handleSeedAdmin}
+              disabled={seeding}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+            >
+              {seeding ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
+              First time? Create admin account
+            </button>
+            {seedMsg && (
+              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-emerald-400 text-xs text-center mt-2 break-all">
+                {seedMsg}
+              </motion.p>
+            )}
+          </div>
+
+          <div className="mt-4 text-center text-sm text-slate-400">
             Don&apos;t have an account?{' '}
             <Link href="/register" className="text-indigo-400 hover:text-indigo-300 font-medium">
               Create one

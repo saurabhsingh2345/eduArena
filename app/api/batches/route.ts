@@ -2,7 +2,6 @@ import { NextRequest } from 'next/server';
 import { connectDB } from '@/lib/db/mongoose';
 import Batch from '@/lib/db/models/Batch';
 import { auth } from '@/lib/auth';
-import { redis, REDIS_KEYS, REDIS_TTL } from '@/lib/redis';
 
 export async function GET(req: NextRequest) {
   await connectDB();
@@ -25,17 +24,40 @@ export async function POST(req: NextRequest) {
 
   await connectDB();
 
-  // Add user to Redis waiting queue
-  const key = REDIS_KEYS.waitingQueue(courseId);
-  await redis.lpush(key, JSON.stringify({ userId, name: userName, avatar: userAvatar ?? '' }));
-  await redis.expire(key, REDIS_TTL.waitingQueue);
-
-  // Check if active batch exists for this course
+  // If an active batch already exists, send them straight to it
   const activeBatch = await Batch.findOne({ courseId, status: 'active' }).lean();
   if (activeBatch) {
     return Response.json({ queued: true, activeBatch });
   }
 
-  const queueLength = await redis.llen(key);
-  return Response.json({ queued: true, queueLength });
+  // Find or create a "waiting" batch for this course
+  let waitingBatch = await Batch.findOne({ courseId, status: 'waiting' });
+
+  if (!waitingBatch) {
+    const batchNumber = (await Batch.countDocuments({ courseId })) + 1;
+    waitingBatch = await Batch.create({
+      courseId,
+      batchNumber,
+      startTime: new Date(),
+      status: 'waiting',
+      learners: [],
+      leaderboard: [],
+    });
+  }
+
+  // Avoid duplicate entries
+  const alreadyIn = (waitingBatch.learners as { userId: { toString(): string } }[])
+    .some((l) => l.userId.toString() === userId);
+
+  if (!alreadyIn) {
+    await Batch.findByIdAndUpdate(waitingBatch._id, {
+      $push: {
+        learners: { userId, joinedAt: new Date(), xpEarned: 0, interactionsCompleted: 0, rank: 0 },
+        leaderboard: { userId, name: userName, avatar: userAvatar ?? '', xp: 0, rank: 0 },
+      },
+    });
+  }
+
+  const updated = await Batch.findById(waitingBatch._id).lean();
+  return Response.json({ queued: true, queueLength: (updated?.learners?.length ?? 1) });
 }

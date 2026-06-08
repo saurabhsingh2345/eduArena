@@ -11,7 +11,8 @@ export function formatTime(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export function getInitials(name: string): string {
+export function getInitials(name: string | undefined | null): string {
+  if (!name) return '?';
   return name
     .split(' ')
     .map((n) => n[0])

@@ -1,78 +1,58 @@
 import { connectDB } from './db/mongoose';
 import Batch from './db/models/Batch';
-import Course from './db/models/Course';
-import { redis, REDIS_KEYS } from './redis';
 
-const BATCH_INTERVAL_MS = 5 * 60 * 1000;
-
-interface WaitingLearner {
-  userId: string;
-  name: string;
-  avatar: string;
-}
+const BATCH_INTERVAL_MS = 1 * 60 * 1000; // 1 minute
 
 export async function startBatchEngine(io: import('socket.io').Server) {
-  console.log('[batch-engine] started — creating batches every 5 minutes');
+  console.log('[batch-engine] started — activating waiting batches every 1 minute');
 
   const run = async () => {
     try {
       await connectDB();
-      const courses = await Course.find({ status: 'published' }).lean();
 
-      for (const course of courses) {
-        const courseId = course._id.toString();
-        const key = REDIS_KEYS.waitingQueue(courseId);
-        const waitingRaw = await redis.lrange(key, 0, -1);
-        if (waitingRaw.length === 0) continue;
+      // Find all waiting batches that have at least one learner
+      const waitingBatches = await Batch.find({
+        status: 'waiting',
+        'learners.0': { $exists: true },
+      }).lean();
 
-        const waitingLearners: WaitingLearner[] = waitingRaw.map((r) => {
-          try { return JSON.parse(r); } catch { return { userId: r, name: 'Learner', avatar: '' }; }
-        });
+      for (const batch of waitingBatches) {
+        const courseId = batch.courseId.toString();
+        const batchId = batch._id.toString();
 
-        const batchNumber = (await Batch.countDocuments({ courseId: course._id })) + 1;
-        const batch = await Batch.create({
-          courseId: course._id,
-          batchNumber,
-          startTime: new Date(),
+        // Promote to active
+        await Batch.findByIdAndUpdate(batch._id, {
           status: 'active',
-          learners: waitingLearners.map((l) => ({
-            userId: l.userId,
-            joinedAt: new Date(),
-            xpEarned: 0,
-            interactionsCompleted: 0,
-            rank: 0,
-          })),
-          leaderboard: waitingLearners.map((l, i) => ({
-            userId: l.userId,
-            name: l.name,
-            avatar: l.avatar,
-            xp: 0,
-            rank: i + 1,
-          })),
+          startTime: new Date(),
         });
 
-        await redis.del(key);
-
+        // Notify all learners waiting on this course
         io.to(`course:${courseId}`).emit('batch:started', {
-          batchId: batch._id.toString(),
-          batchNumber,
-          learnerCount: waitingLearners.length,
+          batchId,
+          batchNumber: batch.batchNumber,
+          learnerCount: batch.learners.length,
         });
 
-        console.log(`[batch-engine] created batch #${batchNumber} for course ${course.title} with ${waitingLearners.length} learners`);
+        console.log(`[batch-engine] batch #${batch.batchNumber} activated for course ${courseId} — ${batch.learners.length} learner(s)`);
       }
+
+      // Clean up empty waiting batches older than 10 minutes
+      await Batch.deleteMany({
+        status: 'waiting',
+        'learners.0': { $exists: false },
+        startTime: { $lte: new Date(Date.now() - 10 * 60 * 1000) },
+      });
     } catch (err) {
       console.error('[batch-engine] error:', err);
     }
   };
 
-  // Run immediately on start, then every 5 min
+  // Run once on start, then every minute
   await run();
   setInterval(run, BATCH_INTERVAL_MS);
 
-  // Broadcast countdown every second
+  // Countdown broadcast every second
   setInterval(() => {
-    // Calculate seconds until next batch tick
     const now = Date.now();
     const nextBatch = Math.ceil(now / BATCH_INTERVAL_MS) * BATCH_INTERVAL_MS;
     const secondsUntilNext = Math.round((nextBatch - now) / 1000);
